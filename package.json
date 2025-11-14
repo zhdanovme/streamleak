@@ -1,0 +1,54 @@
+{
+  "name": "streamleak",
+  "version": "1.0.0",
+  "description": "Data file processor with S3 upload, archive extraction, and Parquet conversion",
+  "main": "dist/index.js",
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "dev": "ts-node --esm src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "jest",
+    "test:integration": "jest --testPathPatterns=integration",
+    "test:unit": "jest --testPathPatterns=unit",
+    "test:e2e": "jest --testPathPatterns=e2e --runInBand --detectOpenHandles"
+  },
+  "keywords": [
+    "s3",
+    "file-processor",
+    "parquet",
+    "archive",
+    "monitoring"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.932.0",
+    "@aws-sdk/lib-storage": "^3.932.0",
+    "better-sqlite3": "^12.4.1",
+    "chokidar": "^4.0.3",
+    "duckdb": "^1.4.2",
+    "mime-types": "^3.0.1",
+    "pino": "^10.1.0",
+    "tar-stream": "^3.1.7",
+    "unzipper": "^0.12.3"
+  },
+  "devDependencies": {
+    "@types/archiver": "^6.0.3",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/jest": "^30.0.0",
+    "@types/mime-types": "^3.0.1",
+    "@types/node": "^24.10.1",
+    "@types/tar-stream": "^3.1.4",
+    "@types/unzipper": "^0.10.11",
+    "archiver": "^7.0.1",
+    "jest": "^30.2.0",
+    "pino-pretty": "^13.1.2",
+    "ts-jest": "^29.4.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}

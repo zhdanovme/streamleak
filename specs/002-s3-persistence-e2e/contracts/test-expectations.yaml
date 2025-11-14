@@ -1,0 +1,428 @@
+# Test Expectations Contract: End-to-End Docker S3 Persistence Test
+# Feature: 002-s3-persistence-e2e
+# Date: 2025-11-15
+# Version: 1.0.0
+
+# This contract defines expected test outcomes in machine-readable format
+# Used by test assertions to validate E2E behavior
+
+metadata:
+  feature_id: "002-s3-persistence-e2e"
+  feature_name: "End-to-End Docker S3 Persistence Test"
+  version: "1.0.0"
+  created_at: "2025-11-15"
+  last_updated: "2025-11-15"
+
+# Environment configuration expectations
+environment:
+  docker:
+    service_name: "minio"
+    container_name: "data-processor-minio-test"
+    ports:
+      s3_api: 9002
+      console: 9003
+    health_check_endpoint: "http://localhost:9002/minio/health/live"
+    health_check_timeout_ms: 30000
+    startup_timeout_ms: 30000
+
+  s3:
+    endpoint: "http://localhost:9002"
+    access_key: "minioadmin"
+    secret_key: "minioadmin"
+    bucket_name_pattern: "^test-bucket-\\d+$"
+    region: "us-east-1"
+
+  filesystem:
+    test_data_dir_pattern: "^/tmp/e2e-test-\\d+$"
+    source_dir_pattern: "^/tmp/e2e-test-\\d+/source$"
+    state_db_pattern: "^/tmp/e2e-test-\\d+/state\\.db$"
+    min_disk_space_mb: 1024
+
+# Mock data expectations
+mock_data:
+  total_files: 13
+
+  regular_files:
+    count: 7
+    files:
+      - name: "data.csv"
+        format: ".csv"
+        type: "regular"
+        size_bytes_min: 900
+        size_bytes_max: 1200
+        should_fail: false
+
+      - name: "config.json"
+        format: ".json"
+        type: "regular"
+        size_bytes_min: 400
+        size_bytes_max: 600
+        should_fail: false
+
+      - name: "logs.txt"
+        format: ".txt"
+        type: "regular"
+        size_bytes_min: 1800
+        size_bytes_max: 2200
+        should_fail: false
+
+      - name: "metrics.csv"
+        format: ".csv"
+        type: "regular"
+        size_bytes_min: 3800
+        size_bytes_max: 4200
+        should_fail: false
+
+      - name: "settings.json"
+        format: ".json"
+        type: "regular"
+        size_bytes_min: 200
+        size_bytes_max: 300
+        should_fail: false
+
+      - name: "readme.txt"
+        format: ".txt"
+        type: "regular"
+        size_bytes_min: 900
+        size_bytes_max: 1200
+        should_fail: false
+
+      - name: "schema.sql"
+        format: ".sql"
+        type: "regular"
+        size_bytes_min: 1800
+        size_bytes_max: 2200
+        should_fail: false
+
+  archive_files:
+    count: 4
+    files:
+      - name: "archive1.tar"
+        format: ".tar"
+        type: "archive"
+        size_bytes_min: 4500
+        size_bytes_max: 5500
+        should_fail: false
+
+      - name: "archive2.gz"
+        format: ".gz"
+        type: "archive"
+        size_bytes_min: 2800
+        size_bytes_max: 3200
+        should_fail: false
+
+      - name: "archive3.zip"
+        format: ".zip"
+        type: "archive"
+        size_bytes_min: 3800
+        size_bytes_max: 4200
+        should_fail: false
+
+      - name: "archive4.tar.gz"
+        format: ".tar.gz"
+        type: "archive"
+        size_bytes_min: 5800
+        size_bytes_max: 6200
+        should_fail: false
+
+  edge_case_files:
+    count: 2
+    files:
+      - name: "corrupted.tar"
+        format: ".tar"
+        type: "archive"
+        size_bytes_min: 400
+        size_bytes_max: 600
+        should_fail: true
+        failure_reason: "corrupted_archive"
+
+      - name: "special-chars_【file】.txt"
+        format: ".txt"
+        type: "regular"
+        size_bytes_min: 200
+        size_bytes_max: 300
+        should_fail: false
+
+# Test scenario expectations
+test_scenarios:
+
+  # P1: Docker Test Environment Setup
+  p1_environment_setup:
+    priority: 1
+    description: "Docker container + S3 + test data setup validation"
+    timeout_ms: 60000
+
+    assertions:
+      - id: "p1-001"
+        description: "Docker container starts successfully"
+        type: "docker_status"
+        expected_value: "healthy"
+
+      - id: "p1-002"
+        description: "S3 endpoint is accessible"
+        type: "http_status"
+        target: "http://localhost:9002/minio/health/live"
+        expected_value: 200
+
+      - id: "p1-003"
+        description: "Test bucket created"
+        type: "s3_bucket_exists"
+        expected_value: true
+
+      - id: "p1-004"
+        description: "Test data directory exists with 13 mock files"
+        type: "file_count"
+        target: "test_data_dir"
+        expected_value: 13
+
+      - id: "p1-005"
+        description: "Source directory created"
+        type: "directory_exists"
+        target: "source_dir"
+        expected_value: true
+
+  # P2: File Tracking and Migration Validation
+  p2_file_tracking_migration:
+    priority: 2
+    description: "File tracking, conversion, and S3 upload validation"
+    timeout_ms: 120000
+
+    assertions:
+      - id: "p2-001"
+        description: "All files inventoried and tracked"
+        type: "database_count"
+        target: "file_metadata"
+        expected_value: 13
+
+      - id: "p2-002"
+        description: "All processing jobs created"
+        type: "database_count"
+        target: "processing_jobs"
+        expected_value: 13
+
+      - id: "p2-003"
+        description: "11 files successfully converted to parquet"
+        type: "database_count"
+        target: "processing_jobs"
+        filter: "status = 'done'"
+        expected_value: 11
+
+      - id: "p2-004"
+        description: "2 files failed processing (corrupted archive)"
+        type: "database_count"
+        target: "processing_jobs"
+        filter: "status = 'failed'"
+        expected_value: 2
+
+      - id: "p2-005"
+        description: "11 parquet files uploaded to S3"
+        type: "s3_object_count"
+        target: "test_bucket"
+        expected_value: 11
+
+      - id: "p2-006"
+        description: "All S3 objects have .parquet extension"
+        type: "s3_object_pattern"
+        target: "test_bucket"
+        pattern: "^.*\\.parquet$"
+        expected_match_count: 11
+
+      - id: "p2-007"
+        description: "11 S3 upload tasks tracked"
+        type: "database_count"
+        target: "s3_upload_tasks"
+        filter: "status = 'done'"
+        expected_value: 11
+
+  # P3: Script Restart and State Persistence
+  p3_script_restart_resume:
+    priority: 3
+    description: "Script interruption and resume validation"
+    timeout_ms: 180000
+
+    setup:
+      - action: "start_script"
+        wait_condition: "50_percent_processed"
+        wait_timeout_ms: 60000
+
+      - action: "send_signal"
+        signal: "SIGTERM"
+        wait_for_exit: true
+        exit_timeout_ms: 10000
+
+      - action: "snapshot_state"
+        capture: ["progress_records", "processing_jobs", "s3_upload_tasks"]
+
+      - action: "restart_script"
+        wait_condition: "100_percent_processed"
+        wait_timeout_ms: 60000
+
+    assertions:
+      - id: "p3-001"
+        description: "State persisted before shutdown"
+        type: "database_count"
+        target: "progress_records"
+        snapshot: "before_restart"
+        expected_value_min: 5
+
+      - id: "p3-002"
+        description: "Script resumes without errors"
+        type: "process_exit_code"
+        expected_value: 0
+
+      - id: "p3-003"
+        description: "No files reprocessed after restart"
+        type: "reprocessing_check"
+        expected_value: 0
+
+      - id: "p3-004"
+        description: "All files processed after restart"
+        type: "database_count"
+        target: "processing_jobs"
+        filter: "status IN ('done', 'failed')"
+        expected_value: 13
+
+      - id: "p3-005"
+        description: "Final state matches single-run state"
+        type: "state_comparison"
+        compare: ["done_count", "failed_count", "s3_object_count"]
+        expected_match: true
+
+  # P4: Failed and Completed File Validation
+  p4_state_validation:
+    priority: 4
+    description: "File state categorization and error handling validation"
+    timeout_ms: 60000
+
+    assertions:
+      - id: "p4-001"
+        description: "11 files marked as done"
+        type: "database_count"
+        target: "processing_jobs"
+        filter: "status = 'done'"
+        expected_value: 11
+
+      - id: "p4-002"
+        description: "2 files marked as failed with error messages"
+        type: "database_count"
+        target: "processing_jobs"
+        filter: "status = 'failed' AND error_message IS NOT NULL"
+        expected_value: 2
+
+      - id: "p4-003"
+        description: "No pending files remain"
+        type: "database_count"
+        target: "processing_jobs"
+        filter: "status = 'pending'"
+        expected_value: 0
+
+      - id: "p4-004"
+        description: "Total files equals done + failed"
+        type: "sum_check"
+        targets: ["done_count", "failed_count"]
+        expected_value: 13
+
+      - id: "p4-005"
+        description: "Failed files have specific error reasons"
+        type: "error_message_check"
+        target: "processing_jobs"
+        filter: "status = 'failed'"
+        expected_patterns:
+          - "corrupted.*archive"
+          - "invalid.*format"
+
+# Performance expectations
+performance:
+  suite_total_duration_ms_max: 300000  # 5 minutes
+  environment_setup_ms_max: 30000      # 30 seconds
+  file_processing_rate_min: 0.5       # files per second (10 files in 20s)
+  s3_upload_rate_min: 0.5              # uploads per second
+  state_persistence_ms_max: 1000       # 1 second to save state
+
+# Cleanup expectations
+cleanup:
+  required_actions:
+    - action: "stop_docker_containers"
+      expected_exit_code: 0
+
+    - action: "remove_docker_volumes"
+      expected_exit_code: 0
+
+    - action: "delete_test_data_dir"
+      verify_removed: true
+
+    - action: "delete_s3_bucket"
+      verify_removed: true
+
+    - action: "close_database_connections"
+      verify_closed: true
+
+  success_criteria:
+    no_leftover_containers: true
+    no_leftover_volumes: true
+    no_leftover_files: true
+    no_leftover_buckets: true
+
+# Success criteria (from spec.md)
+success_criteria:
+  - id: "sc-001"
+    description: "Test completes full execution in under 5 minutes"
+    metric: "suite_duration_ms"
+    threshold_max: 300000
+
+  - id: "sc-002"
+    description: "100% of successfully converted files appear in S3"
+    metric: "s3_upload_success_rate"
+    threshold_min: 1.0  # 100%
+
+  - id: "sc-003"
+    description: "After script restart, 0% of previously completed files are reprocessed"
+    metric: "reprocessing_rate"
+    threshold_max: 0.0  # 0%
+
+  - id: "sc-004"
+    description: "Test correctly identifies at least 90% of intentionally failed files"
+    metric: "failure_detection_rate"
+    threshold_min: 0.9  # 90%
+
+  - id: "sc-005"
+    description: "Test environment created in under 30 seconds"
+    metric: "environment_setup_ms"
+    threshold_max: 30000
+
+  - id: "sc-006"
+    description: "State persistence accuracy less than 1% error rate"
+    metric: "state_accuracy_rate"
+    threshold_min: 0.99  # 99%+
+
+  - id: "sc-007"
+    description: "Test validation phase has 100% assertion accuracy"
+    metric: "assertion_pass_rate"
+    threshold_min: 1.0  # 100%
+
+  - id: "sc-008"
+    description: "Test cleanup removes all artifacts with no leftovers"
+    metric: "cleanup_success_rate"
+    threshold_min: 1.0  # 100%
+
+# Error handling expectations
+error_handling:
+  docker_not_installed:
+    expected_error: "Docker daemon not available"
+    fail_fast: true
+
+  port_conflict:
+    expected_error: "Port 9002 or 9003 already in use"
+    remediation: "Use different ports in test config"
+    fail_fast: true
+
+  insufficient_disk_space:
+    expected_error: "Not enough disk space"
+    min_required_mb: 1024
+    fail_fast: true
+
+  s3_connection_timeout:
+    expected_error: "S3 endpoint not responding"
+    retry_count: 3
+    retry_delay_ms: 2000
+    fail_fast: false
